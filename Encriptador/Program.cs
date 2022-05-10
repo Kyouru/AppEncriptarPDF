@@ -40,10 +40,12 @@ namespace Encriptador
 
             string manual = "false";
             int offset = 0;
+            bool fileindividual = false;
+            string filenombre = "";
 
             while (args.Length - offset > 0)
             {
-                if (args[0 + offset] == "-help" || args[0 + offset] == "--help" || args[0 + offset] == "-hide" || args[0 + offset] == "-killall" || args[0 + offset] == "-manual" || args[0 + offset] == "-intervalo" || args[0 + offset] == "-limite" || args[0 + offset] == "-rutaorigen" || args[0 + offset] == "-rutadestino")
+                if (args[0 + offset] == "-help" || args[0 + offset] == "--help" || args[0 + offset] == "-hide" || args[0 + offset] == "-killall" || args[0 + offset] == "-manual" || args[0 + offset] == "-intervalo" || args[0 + offset] == "-limite" || args[0 + offset] == "-rutaorigen" || args[0 + offset] == "-rutadestino" || args[0 + offset] == "-archivo")
                 {
                     if (args[0 + offset] == "-help" || args[0 + offset] == "--help")
                     {
@@ -72,6 +74,29 @@ namespace Encriptador
                     {
                         manual = "true";
                         offset++;
+                    }
+                    else if (args[0 + offset] == "-archivo")
+                    {
+                        fileindividual = true;
+                        if (args[1 + offset] == null)
+                        {
+                            Console.WriteLine("  Error. Archivo no recibido");
+                            mostrarAyuda();
+                            Environment.Exit(0);
+                        }
+                        else
+                        {
+                            if (File.Exists(pdforigen + args[1 + offset].ToString()))
+                            {
+                                filenombre = args[1 + offset].ToString();
+                            }
+                            else
+                            {
+                                Console.WriteLine("  Error. Archivo no existe.\n" + pdforigen + args[1 + offset].ToString());
+                                Environment.Exit(0);
+                            }
+                        }
+                        offset += 2;
                     }
                     else if (args[0 + offset] == "-intervalo")
                     {
@@ -145,8 +170,12 @@ namespace Encriptador
 
             FileSystemWatcher fileSystemWatcher = new FileSystemWatcher();
             FileSystemWatcher fileSystemWatcherExcelPCT = new FileSystemWatcher();
-
-            if (manual != "true")
+            if (fileindividual == true)
+            {
+                FileSystemEventArgs fsea = new FileSystemEventArgs(WatcherChangeTypes.Created, pdforigen, Path.GetFileName(filenombre));
+                OnCreated(fileSystemWatcher, fsea);
+            }
+            else if (manual != "true")
             {
 
                 fileSystemWatcher.Path = pdforigen;
@@ -198,6 +227,7 @@ namespace Encriptador
             Console.WriteLine(" Ayuda:");
             Console.WriteLine("  -hide: Oculta la consola");
             Console.WriteLine("  -killall: Termina todos los procesos en ejecucion de nombre Encriptador.exe");
+            Console.WriteLine("  -archivo <nombrearchivo>: Procesa el archivo especifico <nombrearchivo>");
             Console.WriteLine("  -manual: Para ejecutar a demanda");
             Console.WriteLine("  -intervalo <tiempo ms>: Invervalo entre los reintentos en caso .pdf bloqueado");
             Console.WriteLine("  -limite <tiempo ms>: Limite total de los reintentos en caso .pdf bloqueado");
