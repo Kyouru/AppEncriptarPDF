@@ -1,21 +1,22 @@
 # AppEncriptarPDF
 
+Visual Studio 2017
+dotnet 4.0 > System.Data.OracleClient
 Modificar las variables necesarias en App_dummy.config y renombrar a App.config
 
 ### Uso
 
 ```powershell
 .\Encriptador.exe <-option (value)> .. <-option (value)>
+  -rutaorigen <ruta>: Procesa los archivos en la <ruta>. Obligatorio.
+  -rutadestino <ruta>: Deja los .pdf con clave en la <ruta>. Obligatorio.
   -hide: Oculta la consola.
   -killall: Termina todos los procesos en ejecución de nombre Encriptador.exe.
-  -manual: Para ejecutar a demanda.
+  -auto: Para que se quede revisando los archivos creados.
   -archivo <nombrearchivo>: Procesa el archivo especifico <nombrearchivo>.
-  -intervalo <tiempo ms>: Invervalo entre los reintentos en caso .pdf bloqueado
-  -limite <tiempo ms>: Limite total de los reintentos en caso .pdf bloqueado
-  -rutaorigen <ruta>: Procesa los archivos en la <ruta>
-  -rutadestino <ruta>: Deja los .pdf con clave en la <ruta>
+  -intervalo <tiempo ms>: Invervalo entre los reintentos en caso .pdf bloqueado.
+  -limite <tiempo ms>: Limite total de los reintentos en caso .pdf bloqueado.
 
-  Orden no relevante
 ```
 
 ## Variable en Base de Datos

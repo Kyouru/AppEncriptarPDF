@@ -5,11 +5,11 @@ using System.Configuration;
 using iTextSharp.text.pdf;
 using iTextSharp.text;
 using System.Data;
-using Oracle.ManagedDataAccess.Client;
 using Microsoft.Office.Interop.Excel;
 using System.Threading;
 using System.Runtime.InteropServices;
 using System.Diagnostics;
+using System.Data.OracleClient;
 
 namespace Encriptador
 {
@@ -20,32 +20,39 @@ namespace Encriptador
 
         [DllImport("user32.dll")]
         static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-        static string pdforigen;
-        static string pdfdestino;
+        static string pdforigen = "";
+        static string pdfdestino = "";
         static int intervalo;
         static int limite;
+        static string connectionString;
 
         static void Main(string[] args)
         {
             const int SW_HIDE = 0;
             //const int SW_SHOW = 5;
+            //
             var handle = GetConsoleWindow();
 
             Process currentProcess = Process.GetCurrentProcess();
             Console.Title = "Encriptar PDF";
-            pdforigen = ConfigurationManager.AppSettings["ruta_origen"].ToString();
-            pdfdestino = ConfigurationManager.AppSettings["ruta_destino"].ToString();
-            intervalo = Int32.Parse(ConfigurationManager.AppSettings["intervalo"].ToString());
-            limite = Int32.Parse(ConfigurationManager.AppSettings["limite"].ToString());
 
-            string manual = "false";
+            //pdforigen = ConfigurationManager.AppSettings["ruta_origen"].ToString();
+            //pdfdestino = ConfigurationManager.AppSettings["ruta_destino"].ToString();
+            connectionString = ConfigurationManager.AppSettings["OracleCnx"].ToString();
+
+            intervalo = 1000;
+            limite = 10000;
+
+            string manual = "true";
             int offset = 0;
             bool fileindividual = false;
+            bool rutaorigen = false;
+            bool rutadestino = false;
             string filenombre = "";
 
             while (args.Length - offset > 0)
             {
-                if (args[0 + offset] == "-help" || args[0 + offset] == "--help" || args[0 + offset] == "-hide" || args[0 + offset] == "-killall" || args[0 + offset] == "-manual" || args[0 + offset] == "-intervalo" || args[0 + offset] == "-limite" || args[0 + offset] == "-rutaorigen" || args[0 + offset] == "-rutadestino" || args[0 + offset] == "-archivo")
+                if (args[0 + offset] == "-help" || args[0 + offset] == "--help" || args[0 + offset] == "-hide" || args[0 + offset] == "-killall" || args[0 + offset] == "-auto" || args[0 + offset] == "-intervalo" || args[0 + offset] == "-limite" || args[0 + offset] == "-rutaorigen" || args[0 + offset] == "-rutadestino" || args[0 + offset] == "-archivo")
                 {
                     if (args[0 + offset] == "-help" || args[0 + offset] == "--help")
                     {
@@ -70,9 +77,9 @@ namespace Encriptador
                         }
                         Environment.Exit(0);
                     }
-                    else if (args[0 + offset] == "-manual")
+                    else if (args[0 + offset] == "-auto")
                     {
-                        manual = "true";
+                        manual = "false";
                         offset++;
                     }
                     else if (args[0 + offset] == "-archivo")
@@ -86,15 +93,7 @@ namespace Encriptador
                         }
                         else
                         {
-                            if (File.Exists(pdforigen + args[1 + offset].ToString()))
-                            {
-                                filenombre = args[1 + offset].ToString();
-                            }
-                            else
-                            {
-                                Console.WriteLine("  Error. Archivo no existe.\n" + pdforigen + args[1 + offset].ToString());
-                                Environment.Exit(0);
-                            }
+                            filenombre = args[1 + offset].ToString();
                         }
                         offset += 2;
                     }
@@ -128,13 +127,14 @@ namespace Encriptador
                     }
                     else if (args[0 + offset] == "-rutaorigen")
                     {
-                        if (Directory.Exists(args[1 + offset]))
+                        if (Directory.Exists(args[1 + offset].ToString()))
                         {
-                            pdforigen = args[1 + offset];
+                            pdforigen = args[1 + offset].ToString();
+                            rutaorigen = true;
                         }
                         else
                         {
-                            Console.WriteLine("  Error. Ruta Origen no existe");
+                            Console.WriteLine("  Error. Ruta Origen no existe\n");
                             mostrarAyuda();
                             Environment.Exit(0);
                         }
@@ -142,9 +142,10 @@ namespace Encriptador
                     }
                     else if (args[0 + offset] == "-rutadestino")
                     {
-                        if (Directory.Exists(args[1 + offset]))
+                        if (Directory.Exists(args[1 + offset].ToString()))
                         {
-                            pdfdestino = args[1 + offset];
+                            pdfdestino = args[1 + offset].ToString();
+                            rutadestino = true;
                         }
                         else
                         {
@@ -163,14 +164,34 @@ namespace Encriptador
                 }
             }
 
-            string rutainput2 = SelectFromWhere("SELECT TBLDETALLE FROM SYST900 S WHERE TBLCODTAB = 50 AND TBLESTADO = '1' AND tblcodarg IN (17)", false) + "\\";
+            if (!rutaorigen)
+            {
+                Console.WriteLine("  Error. Parametro ruta origen es obligatorio.\n");
+                mostrarAyuda();
+                Environment.Exit(0);
+            }
 
-            Console.WriteLine(rutainput2);
+            if (!rutadestino)
+            {
+                Console.WriteLine("  Error. Parametro ruta destino es obligatorio.\n");
+                mostrarAyuda();
+                Environment.Exit(0);
+            }
+
+            if (fileindividual && !File.Exists(Path.Combine(pdforigen, filenombre)))
+            {
+                Console.WriteLine("  Error. Archivo no existe.\n" + Path.Combine(pdforigen, filenombre));
+                Environment.Exit(0);
+            }
+
+            //string rutainput2 = SelectFromWhere("SELECT TBLDETALLE FROM SYST900 S WHERE TBLCODTAB = 50 AND TBLESTADO = '1' AND tblcodarg IN (17)", false) + "\\";
+
+            //Console.WriteLine(rutainput2);
             Console.WriteLine(pdforigen);
 
             FileSystemWatcher fileSystemWatcher = new FileSystemWatcher();
-            FileSystemWatcher fileSystemWatcherExcelPCT = new FileSystemWatcher();
-            if (fileindividual == true)
+            //FileSystemWatcher fileSystemWatcherExcelPCT = new FileSystemWatcher();
+            if (fileindividual)
             {
                 FileSystemEventArgs fsea = new FileSystemEventArgs(WatcherChangeTypes.Created, pdforigen, Path.GetFileName(filenombre));
                 OnCreated(fileSystemWatcher, fsea);
@@ -183,9 +204,9 @@ namespace Encriptador
                 fileSystemWatcher.EnableRaisingEvents = true;
                 //fileSystemWatcher.IncludeSubdirectories = false;
 
-                fileSystemWatcherExcelPCT.Path = rutainput2;
-                fileSystemWatcherExcelPCT.Created += ExecuteExcelPCT;
-                fileSystemWatcherExcelPCT.EnableRaisingEvents = true;
+                //fileSystemWatcherExcelPCT.Path = rutainput2;
+                //fileSystemWatcherExcelPCT.Created += ExecuteExcelPCT;
+                //fileSystemWatcherExcelPCT.EnableRaisingEvents = true;
                 //fileSystemWatcherExcelPCT.IncludeSubdirectories = false;
 
                 Console.Read();
@@ -193,9 +214,9 @@ namespace Encriptador
             else
             {
                 string[] dirs = Directory.GetFiles(pdforigen);
+                Console.WriteLine("Ruta Password PDF: " + pdforigen);
                 if (dirs.Length > 0)
                 {
-                    Console.WriteLine("\nRuta Password PDF: " + pdforigen);
                     Console.WriteLine("Se encontró " + dirs.Length + " archivos:");
 
                     foreach (string dir in dirs)
@@ -205,7 +226,11 @@ namespace Encriptador
                         OnCreated(fileSystemWatcher, fsea);
                     }
                 }
-
+                else
+                {
+                    Console.WriteLine("No se encontró archivos en la ruta.");
+                }
+                /*
                 dirs = Directory.GetFiles(rutainput2);
                 if (dirs.Length > 0)
                 {
@@ -219,34 +244,35 @@ namespace Encriptador
                         ExecuteExcelPCT(fileSystemWatcherExcelPCT, fsea);
                     }
                 }
+                */
             }
         }
 
         static void mostrarAyuda()
         {
             Console.WriteLine(" Ayuda:");
-            Console.WriteLine("  -hide: Oculta la consola");
-            Console.WriteLine("  -killall: Termina todos los procesos en ejecucion de nombre Encriptador.exe");
-            Console.WriteLine("  -archivo <nombrearchivo>: Procesa el archivo especifico <nombrearchivo>");
-            Console.WriteLine("  -manual: Para ejecutar a demanda");
-            Console.WriteLine("  -intervalo <tiempo ms>: Invervalo entre los reintentos en caso .pdf bloqueado");
-            Console.WriteLine("  -limite <tiempo ms>: Limite total de los reintentos en caso .pdf bloqueado");
-            Console.WriteLine("  -rutaorigen <ruta>: Procesa los archivos en la <ruta>");
-            Console.WriteLine("  -rutadestino <ruta>: Deja los .pdf con clave en la <ruta>");
+            Console.WriteLine("  -rutaorigen <ruta>: Procesa los archivos en la <ruta>. Obligatorio.");
+            Console.WriteLine("  -rutadestino <ruta>: Deja los .pdf con clave en la <ruta>. Obligatorio.");
+            Console.WriteLine("  -hide: Oculta la consola.");
+            Console.WriteLine("  -killall: Termina todos los procesos en ejecucion de nombre Encriptador.exe.");
+            Console.WriteLine("  -archivo <nombrearchivo>: Procesa el archivo especifico <nombrearchivo>.");
+            Console.WriteLine("  -auto: Para que se quede revisando los archivos creados.");
+            Console.WriteLine("  -intervalo <tiempo ms>: Invervalo entre los reintentos en caso .pdf bloqueado.");
+            Console.WriteLine("  -limite <tiempo ms>: Limite total de los reintentos en caso .pdf bloqueado.");
         }
 
         static void OnCreated(object sender, FileSystemEventArgs e)
         {
 
-            FileInfo fi = new FileInfo(pdforigen + e.Name);
+            FileInfo fi = new FileInfo(Path.Combine(pdforigen, e.Name));
 
             int cont = 0;
             //validar que el archivo no este en proceso de copia o este en uso por otra aplicacion
             while (IsFileLocked(fi))
             {
-                Thread.Sleep(Int32.Parse(ConfigurationManager.AppSettings["intervalo"].ToString()));
+                Thread.Sleep(intervalo);
                 cont++;
-                if (cont >= Int32.Parse(ConfigurationManager.AppSettings["limite"].ToString())/Int32.Parse(ConfigurationManager.AppSettings["intervalo"].ToString()))
+                if (cont >= limite / intervalo)
                 {
                     break;
                 }
@@ -255,16 +281,24 @@ namespace Encriptador
             try
             {
                 Document document = new Document();
-                PdfReader reader = new PdfReader(pdforigen + e.Name);
-                PdfStamper stamper = new PdfStamper(reader, new FileStream(pdfdestino + e.Name, FileMode.Create));
-                stamper.SetEncryption(Encoding.ASCII.GetBytes("Cts2019C00Pac"),
-                                        Encoding.ASCII.GetBytes(Obtener_DNI(e.Name.ToString().Substring(0, 7))),
-                                        PdfWriter.ALLOW_PRINTING, PdfWriter.ENCRYPTION_AES_128
-                               | PdfWriter.DO_NOT_ENCRYPT_METADATA);
-                stamper.Close();
-                reader.Close();
-                File.Delete(pdforigen + e.Name);
-                Console.WriteLine(pdforigen + e.Name + " >> " + pdfdestino + e.Name);
+                PdfReader reader = new PdfReader(Path.Combine(pdforigen, e.Name));
+                PdfStamper stamper = new PdfStamper(reader, new FileStream(Path.Combine(pdfdestino, e.Name), FileMode.Create));
+                string dni = Obtener_DNI(e.Name.ToString().Substring(0, 7));
+                if (dni != "")
+                {
+                    stamper.SetEncryption(Encoding.ASCII.GetBytes("Cts2019C00Pac"),
+                                            Encoding.ASCII.GetBytes(dni),
+                                            PdfWriter.ALLOW_PRINTING, PdfWriter.ENCRYPTION_AES_128
+                                   | PdfWriter.DO_NOT_ENCRYPT_METADATA);
+                    stamper.Close();
+                    reader.Close();
+                    File.Delete(Path.Combine(pdforigen, e.Name));
+                    Console.WriteLine(Path.Combine(pdforigen, e.Name) + " >> " + Path.Combine(pdfdestino, e.Name));
+                }
+                else
+                {
+                    Console.WriteLine("  Error obteniendo el DNI de " + e.Name.ToString().Substring(0, 7));
+                }
             }
             catch (Exception ex)
             {
@@ -273,7 +307,6 @@ namespace Encriptador
         }
         public static string Obtener_DNI(string vCodSocio)
         {
-            string connectionString = ConfigurationManager.AppSettings["OracleCnx"].ToString();
             string queryString =
                 "SELECT PN.NUMERODOCUMENTOID FROM PERSONA P, PERSONANATURAL PN WHERE P.CODIGOPERSONA=PN.CODIGOPERSONA AND P.CIP=" + vCodSocio.ToString();
             string vDNI = "";
@@ -299,6 +332,7 @@ namespace Encriptador
             }
             return vDNI;
         }
+
         static void ExecuteExcelPCT(object sender, FileSystemEventArgs e)
         {
             string rutainput = SelectFromWhere("SELECT TBLDETALLE FROM SYST900 S WHERE TBLCODTAB = 50 AND TBLESTADO = '1' AND tblcodarg IN (17)", false) + "\\";
@@ -328,7 +362,6 @@ namespace Encriptador
 
         public static void readed_filePCT(string prmtrutainput, string prmtrutaoutput, string prmtrutarejected)
         {
-            string connectionString = ConfigurationManager.AppSettings["OracleCnx"].ToString();
             string queryString = "SELECT DISTINCT acbtmp.ID_ARCHIVO, SUBSTR(acbtmp.NOMBREARCHIVO,(INSTR(acbtmp.NOMBREARCHIVO,'\\',-1)+1)) FILEIN,(SUBSTR(SUBSTR(acbtmp.NOMBREARCHIVO, (INSTR(acbtmp.NOMBREARCHIVO, '\\',-1)+1)),1,INSTR(SUBSTR(acbtmp.NOMBREARCHIVO,(INSTR(acbtmp.NOMBREARCHIVO,'\\',-1)+1)),'.',1,1)-1)) ||(CASE MOD(acbtmp.ESTADO, 2) WHEN 1 THEN '_APROBADO' ELSE '_RECHAZADO' END) || '_' || (TO_CHAR(SYSDATE, 'dd-mm-YYYY HH24MISS') || '.' ||SUBSTR(acbtmp.NOMBREARCHIVO,(INSTR(acbtmp.NOMBREARCHIVO, '.', -1, 1) + 1), length(acbtmp.NOMBREARCHIVO))) As FileOut FROM CRONOGRAMACOFIDETMP acbtmp";
 
             int vid_archivo = 0;
@@ -534,7 +567,6 @@ namespace Encriptador
         }
         public static string SelectFromWhere(string executequery, bool eslike)
         {
-            string connectionString = ConfigurationManager.AppSettings["OracleCnx"].ToString();
             string queryString = executequery.ToString();
 
             string vDATO = "";
@@ -564,7 +596,6 @@ namespace Encriptador
         }
         public static void InsUpdDel_Oracle(string executequery)
         {
-            string connectionString = ConfigurationManager.AppSettings["OracleCnx"].ToString();
             string queryString = executequery.ToString();
             string queryCommit = "COMMIT";
 
@@ -592,7 +623,6 @@ namespace Encriptador
         }
         public static string Function_Procedure_Oracle(int tipofunpro /* tipofunpro: 1 para function, 2 para procedure  */, string executequery, string nomprmt1, int prmt1, string nomprmt2, int prmt2, string nomprmt3, int prmt3)
         {
-            string connectionString = ConfigurationManager.AppSettings["OracleCnx"].ToString();
             string queryString = executequery.ToString();
 
             string vDATO = "";
@@ -609,23 +639,23 @@ namespace Encriptador
                     command.CommandType = CommandType.StoredProcedure;
                     if (prmt1 >= 0)
                     {
-                        command.Parameters.Add(new OracleParameter(nomprmt1, OracleDbType.Int32)).Value = prmt1;
+                        command.Parameters.Add(new OracleParameter(nomprmt1, OracleType.Int32)).Value = prmt1;
                         command.Parameters[nomprmt1].Direction = ParameterDirection.Input;
                     }
                     if (prmt2 >= 0)
                     {
-                        command.Parameters.Add(new OracleParameter(nomprmt2, OracleDbType.Int32)).Value = prmt2;
+                        command.Parameters.Add(new OracleParameter(nomprmt2, OracleType.Int32)).Value = prmt2;
                         command.Parameters[nomprmt2].Direction = ParameterDirection.Input;
                     }
                     if (prmt3 >= 0)
                     {
-                        command.Parameters.Add(new OracleParameter(nomprmt3, OracleDbType.Int32)).Value = prmt3;
+                        command.Parameters.Add(new OracleParameter(nomprmt3, OracleType.Int32)).Value = prmt3;
                         command.Parameters[nomprmt3].Direction = ParameterDirection.Input;
                     }
 
                     if (tipofunpro == 1)
                     {
-                        command.Parameters.Add("retorno", OracleDbType.Int32);
+                        command.Parameters.Add("retorno", OracleType.Int32);
                         command.Parameters["retorno"].Direction = ParameterDirection.ReturnValue;
                     }                    
 
